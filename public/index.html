@@ -1,0 +1,131 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Task Manager</title>
+  <style>
+    :root { --bg:#0b0d12; --card:#141824; --border:#262d40; --text:#e8ecf5;
+            --muted:#8a93a8; --accent:#6c8cff; --danger:#ff6c7a; }
+    * { box-sizing: border-box; }
+    body { margin:0; min-height:100vh; display:grid; place-items:start center;
+           padding:3rem 1rem; background:var(--bg); color:var(--text);
+           font-family:'Segoe UI Variable Text','Segoe UI',system-ui,sans-serif; }
+    .card { width:100%; max-width:560px; background:var(--card);
+            border:1px solid var(--border); border-radius:18px; padding:2rem; }
+    h1 { margin:0 0 1.2rem; }
+    form { display:flex; gap:.6rem; margin-bottom:1.2rem; }
+    input[type=text] { flex:1; padding:.8rem 1rem; border-radius:10px;
+           border:1px solid var(--border); background:#0f1320; color:var(--text);
+           font-size:1rem; }
+    input[type=text]:focus { outline:2px solid var(--accent); }
+    button { padding:.6rem 1rem; border:0; border-radius:10px; cursor:pointer;
+             background:var(--accent); color:#fff; font-size:.95rem; }
+    button.ghost { background:transparent; border:1px solid var(--border); color:var(--muted); }
+    button.danger { background:transparent; border:1px solid var(--danger); color:var(--danger); }
+    ul { list-style:none; padding:0; margin:0; }
+    li { display:flex; align-items:center; gap:.7rem; padding:.8rem 0;
+         border-bottom:1px solid var(--border); }
+    li span { flex:1; word-break:break-word; }
+    li.done span { text-decoration:line-through; color:var(--muted); }
+    #empty { color:var(--muted); text-align:center; margin:1rem 0 0; }
+  </style>
+
+</head>
+<body>
+  <main class="card">
+    <h1>Task Manager</h1>
+
+    <form id="form">
+      <input type="text" id="title" placeholder="Add a new task..." autocomplete="off" />
+      <button type="submit">Add</button>
+    </form>
+
+    <ul id="list"></ul>
+    <p id="empty">No tasks yet. Add your first one above.</p>
+  </main>
+
+  <script>
+    const form  = document.getElementById('form');
+    const input = document.getElementById('title');
+    const list  = document.getElementById('list');
+    const empty = document.getElementById('empty');
+
+    // helper: send JSON to the server
+    function send(url, method, body) {
+      return fetch(url, {
+        method,
+        headers: { 'Content-Type': 'application/json' },
+        body: body ? JSON.stringify(body) : undefined,
+      });
+    }
+
+    // get tasks from the server and draw them
+    async function load() {
+      const res = await fetch('/api/tasks');
+
+      render(await res.json());
+    }
+
+    function render(tasks) {
+      list.innerHTML = '';                    // clear the list
+      empty.hidden = tasks.length > 0;        // show "no tasks" only when empty
+
+      tasks.forEach((task) => {
+        const li = document.createElement('li');
+        if (task.done) li.classList.add('done');
+
+        // checkbox: mark done / not done
+        const check = document.createElement('input');
+        check.type = 'checkbox';
+        check.checked = task.done;
+        check.addEventListener('change', async () => {
+          await send(`/api/tasks/${task.id}`, 'PATCH', { done: check.checked });
+          load();
+        });
+
+        // task title (textContent is safe against injected HTML)
+        const title = document.createElement('span');
+        title.textContent = task.title;
+
+        // edit button
+        const edit = document.createElement('button');
+        edit.className = 'ghost';
+        edit.textContent = 'Edit';
+        edit.addEventListener('click', async () => {
+          const newTitle = prompt('Edit task', task.title);
+          if (newTitle && newTitle.trim()) {
+            await send(`/api/tasks/${task.id}`, 'PATCH', { title: newTitle });
+
+            load();
+          }
+        });
+
+        // delete button
+        const del = document.createElement('button');
+        del.className = 'danger';
+        del.textContent = 'Delete';
+        del.addEventListener('click', async () => {
+          await send(`/api/tasks/${task.id}`, 'DELETE');
+          load();
+        });
+
+        li.append(check, title, edit, del);
+        list.appendChild(li);
+      });
+    }
+
+    // add a new task
+    form.addEventListener('submit', async (e) => {
+      e.preventDefault();                     // stop the page from reloading
+      const title = input.value.trim();
+      if (!title) return;
+      await send('/api/tasks', 'POST', { title });
+      input.value = '';
+      load();
+    });
+
+    load();                                   // show tasks when the page opens
+  </script>
+</body>
+</html>
